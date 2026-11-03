@@ -8,3 +8,8 @@ build/
 *.so
 .mypy_cache/
 .ruff_cache/
+*.spec.bak
+src/open_broadcast/models/
+packaging/dist/
+.pytest_cache/
+packaging/windows/version_info.txt

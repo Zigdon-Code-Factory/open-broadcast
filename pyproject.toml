@@ -1,43 +1,50 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-broadcast"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Free, open-source NVIDIA Broadcast alternative — runs on CPU"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-authors = [
-    { name = "Zigdon7" },
-]
+authors = [{ name = "Zigdon7" }]
 
 dependencies = [
-    "opencv-python>=4.8",
-    "mediapipe>=0.10",
     "numpy>=1.24",
-    "sounddevice>=0.4",
+    "opencv-contrib-python>=4.8",
+    "mediapipe>=0.10.14",
+    "onnxruntime>=1.17",
+    "sounddevice>=0.4.6",
     "pyside6>=6.6",
-    "pynput>=1.7",
+    "pyvirtualcam>=0.11",
+    "pygrabber>=0.2; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "ruff>=0.1",
-    "mypy>=1.0",
-]
-linux = [
-    "pyvirtualcam>=0.10",
-]
+dev = ["pytest>=7.0", "ruff>=0.4"]
+audio-test = ["soundfile>=0.12"]
+build = ["pyinstaller>=6.10", "pillow>=10"]
 
 [project.scripts]
 open-broadcast = "open_broadcast.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "open_broadcast.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+open_broadcast = ["assets/*", "models/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W"]
+select = ["E", "F", "I", "N", "W", "UP", "B"]
