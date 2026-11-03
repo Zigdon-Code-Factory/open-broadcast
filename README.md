@@ -58,7 +58,7 @@ python scripts/fetch_models.py    # downloads models (SHA-256 pinned) into src/o
 open-broadcast                    # or: python -m open_broadcast
 ```
 
-On Linux, also install `libportaudio2` and the Qt runtime libraries (`libegl1 libxkbcommon0 libxcb-cursor0`).
+On Linux, also install `libportaudio2` and the graphics/Qt runtime libraries (`libegl1 libgles2 libxkbcommon0 libxcb-cursor0`), including for CPU-only processing.
 
 ```bash
 pytest                 # unit tests (model-dependent tests are skipped if models aren't fetched)
