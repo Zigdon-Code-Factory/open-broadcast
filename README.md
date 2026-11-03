@@ -2,6 +2,20 @@
 
 A free, open-source alternative to NVIDIA Broadcast that runs entirely on CPU. No GPU, no PyTorch.
 
+## Quick Start
+
+**Example: use a noise-cleaned microphone in Discord or Zoom on Windows.**
+
+1. Download and run the Windows `*-setup.exe` from [Releases](https://github.com/Zigdon-Code-Factory/open-broadcast/releases/latest). For an unpublished build, download `release-binaries-windows-x64` from a successful [Release workflow run](https://github.com/Zigdon-Code-Factory/open-broadcast/actions/workflows/release.yml), extract the artifact ZIP, and run the installer inside.
+2. Install [VB-Audio Virtual Cable](https://vb-audio.com/Cable/) separately, restart if its installer requests it, then open **Open Broadcast**. The virtual audio driver is not bundled with the app.
+3. For microphone-only use, uncheck **Camera**. Under **Microphone**, choose your physical/headset microphone as **Input** and **CABLE Input** as **Output**. Use **Refresh devices** if the cable is not listed.
+4. Enable **Noise removal (DeepFilterNet3)**, optionally enable **Mute when not speaking (Silero VAD)**, and click **Start**. Speak and check that the level meter responds.
+5. In Discord or Zoom, select **CABLE Output** as your microphone and use that app's microphone test. Keep Open Broadcast running; closing its control panel leaves it in the system tray.
+
+**Routing:** your microphone → Open Broadcast → **CABLE Input** → **CABLE Output** → Discord/Zoom. The two cable names refer to opposite ends of the same virtual cable.
+
+For macOS/Linux builds or camera output, see [Install](#install) and [Virtual devices](#virtual-devices). To run from source, see [Develop](#develop).
+
 ## Features
 
 - 🎙️ **AI Noise Suppression**: DeepFilterNet3 (full-band 48 kHz, streaming ONNX, about 0.4 ms per 10 ms frame)
