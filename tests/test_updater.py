@@ -62,6 +62,42 @@ def test_not_self_updatable_from_source():
     assert updater.can_self_update() is False
 
 
+def test_installed_windows_build_detection(monkeypatch, tmp_path):
+    monkeypatch.setattr(updater.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(updater.paths, "is_frozen", lambda: True)
+    monkeypatch.setattr(updater.sys, "executable", str(tmp_path / "OpenBroadcast.exe"))
+    assert not updater.can_self_update()
+    (tmp_path / "unins000.exe").touch()
+    assert updater.can_self_update()
+
+
+def test_installer_targets_existing_install_and_relaunches(monkeypatch, tmp_path):
+    install_dir = tmp_path / "Existing install"
+    monkeypatch.setattr(updater, "can_self_update", lambda: True)
+    monkeypatch.setattr(updater.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(updater.sys, "executable", str(install_dir / "OpenBroadcast.exe"))
+    monkeypatch.setattr(updater.subprocess, "DETACHED_PROCESS", 0x8, raising=False)
+    monkeypatch.setattr(updater.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, raising=False)
+    launches = []
+    monkeypatch.setattr(
+        updater.subprocess, "Popen", lambda command, **kwargs: launches.append((command, kwargs))
+    )
+    installer = tmp_path / "setup.exe"
+    updater.launch_installer(installer)
+    command, options = launches[0]
+    assert command == [
+        str(installer), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS",
+        "/RELAUNCH=1", f"/DIR={install_dir}",
+    ]
+    assert options == {"creationflags": 0x208, "close_fds": True}
+
+
+def test_installer_cannot_run_from_unsupported_build(monkeypatch, tmp_path):
+    monkeypatch.setattr(updater, "can_self_update", lambda: False)
+    with pytest.raises(RuntimeError, match="Windows installer build"):
+        updater.launch_installer(tmp_path / "setup.exe")
+
+
 @pytest.fixture
 def download_release(monkeypatch):
     payload = b"test installer payload"

@@ -178,6 +178,8 @@ def can_self_update() -> bool:
 
 def launch_installer(installer: Path) -> None:
     """Run the Inno Setup installer silently; it closes this app and relaunches it after."""
+    if not can_self_update():
+        raise RuntimeError("In-place updates require the Windows installer build")
     args = [
         str(installer),
         "/SILENT",
@@ -185,6 +187,7 @@ def launch_installer(installer: Path) -> None:
         "/NORESTART",
         "/CLOSEAPPLICATIONS",
         "/RELAUNCH=1",
+        f"/DIR={Path(sys.executable).parent}",
     ]
     flags = 0
     if platform.system() == "Windows":

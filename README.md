@@ -55,7 +55,8 @@ In Zoom, Discord and similar apps, pick **CABLE Output** (Windows) as the microp
 ## Updates
 
 - The app checks GitHub Releases for a newer version at startup and every 6 hours after that. You can also check manually from the tray menu (**Check for Updates…**) or from **Check now** in the control panel. Turn off **Check for updates automatically** in the control panel to disable automatic checks.
-- **Windows installer build**: choose **Install and restart**. The app downloads the new installer, verifies its SHA-256 against the release's `SHA256SUMS.txt`, closes, upgrades silently and relaunches. Your settings are kept.
+- **Windows installer build**: click **Update and restart** in the control panel or tray menu. One click checks GitHub for a newer release, downloads its installer, verifies its SHA-256 against `SHA256SUMS.txt`, closes the app, upgrades the existing installation and relaunches. Your settings are kept. If there is no newer release, the app reports that you are up to date. The button is disabled while checking or downloading; downloads can be cancelled before installation.
+- Automatic background checks still ask before installing. The existing **Check now** / **Install and restart** confirmation flow also remains available.
 - **Portable, macOS and Linux builds**: the prompt opens the release page instead.
 - Pre-release tags such as `v1.2.0-rc1` are never offered as updates.
 

@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from open_broadcast import __version__, paths
+from open_broadcast import __version__, paths, updater
 from open_broadcast.config import BACKGROUND_MODES
 from open_broadcast.pipeline import devices
 from open_broadcast.pipeline.video import list_cameras
@@ -191,6 +191,18 @@ class ControlPanel(QWidget):
         self.start_btn.setMinimumHeight(36)
         self.start_btn.clicked.connect(self.toggle)
         root.addWidget(self.start_btn)
+
+        self.update_now_btn = QPushButton("Update and restart")
+        self.update_now_btn.setToolTip(
+            "Check GitHub for a newer release, verify and install it in place, then restart. "
+            "Your settings are kept."
+        )
+        self.update_now_btn.setVisible(updater.can_self_update())
+        self.update_now_btn.clicked.connect(self.updates.update_now)
+        self.updates.busy_changed.connect(
+            lambda busy: self.update_now_btn.setEnabled(not busy)
+        )
+        root.addWidget(self.update_now_btn)
 
         footer = QHBoxLayout()
         footer.addWidget(QLabel(f"v{__version__}"))
@@ -383,6 +395,14 @@ class SystemTrayApp(QSystemTrayIcon):
         updates = QAction("Check for Updates…", menu)
         updates.triggered.connect(lambda: self.updates.check(interactive=True))
         menu.addAction(updates)
+
+        self.update_now_action = QAction("Update and restart", menu)
+        self.update_now_action.setVisible(updater.can_self_update())
+        self.update_now_action.triggered.connect(self.updates.update_now)
+        self.updates.busy_changed.connect(
+            lambda busy: self.update_now_action.setEnabled(not busy)
+        )
+        menu.addAction(self.update_now_action)
 
         menu.addSeparator()
         quit_action = QAction("Quit", menu)
