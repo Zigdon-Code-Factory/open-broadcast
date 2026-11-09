@@ -478,6 +478,7 @@ class ControlPanel(QWidget):
         controls.addWidget(self.video_group)
 
         self.camera_effects, effects = self._card("CAMERA EFFECTS")
+        effects.setSpacing(8)
         effects.addWidget(label("Background", "muted"))
         self.bg_combo = QComboBox()
         self.bg_combo.setAccessibleName("Background effect")

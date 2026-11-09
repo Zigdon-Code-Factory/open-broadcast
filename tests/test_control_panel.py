@@ -260,7 +260,7 @@ def test_default_window_fits_all_tabs_without_scrolling(panel, application):
         application.processEvents()
         page = panel.tabs.currentWidget()
         assert page.horizontalScrollBar().maximum() == 0
-        assert page.verticalScrollBar().maximum() == 0
+        assert page.verticalScrollBar().maximum() == 0, panel.tabs.tabText(index)
 
 
 def test_start_stop_controls_and_loading_state(panel, monkeypatch):
