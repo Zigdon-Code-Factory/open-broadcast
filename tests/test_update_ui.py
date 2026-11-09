@@ -2,17 +2,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
 from open_broadcast import updater
 from open_broadcast.config import PipelineConfig
 from open_broadcast.ui import tray, update
 from open_broadcast.ui.update import UpdateController
-
-
-@pytest.fixture(scope="session")
-def application():
-    return QApplication.instance() or QApplication([])
 
 
 @pytest.fixture

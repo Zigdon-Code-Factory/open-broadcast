@@ -1,4 +1,4 @@
-"""Audio pipeline: mic -> DeepFilterNet3 (noise removal) -> Silero VAD gate -> virtual mic.
+"""Audio pipeline: mic -> low-cut -> DeepFilterNet3 -> Silero VAD gate -> virtual mic.
 
 Both models run through ONNX Runtime, so no PyTorch is needed at runtime.
 """
@@ -6,6 +6,7 @@ Both models run through ONNX Runtime, so no PyTorch is needed at runtime.
 from __future__ import annotations
 
 import logging
+import math
 import platform
 import threading
 from typing import TYPE_CHECKING
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from open_broadcast import models
+from open_broadcast.config import NOISE_REDUCTION_MAX_DB
 from open_broadcast.pipeline import devices
 
 if TYPE_CHECKING:
@@ -36,14 +38,75 @@ def _ort_session(path):
     return ort.InferenceSession(str(path), opts, providers=["CPUExecutionProvider"])
 
 
+def wasapi_settings(device_index: int):
+    """WASAPI auto sample-rate conversion for ``device_index``, or None on other host APIs."""
+    if sd is None or platform.system() != "Windows":
+        return None
+    hostapi = sd.query_hostapis(sd.query_devices(device_index)["hostapi"])
+    if "WASAPI" not in hostapi["name"]:
+        return None
+    return sd.WasapiSettings(auto_convert=True)
+
+
+def attenuation_mix(limit_db: float) -> float:
+    """Share of the unprocessed signal to blend back in for a given attenuation limit.
+
+    Mirrors DeepFilterNet's ``atten_lim_db``: noise is reduced by at most ``limit_db``.
+    Returns 0 (fully processed) at or above NOISE_REDUCTION_MAX_DB.
+    """
+    if limit_db >= NOISE_REDUCTION_MAX_DB:
+        return 0.0
+    return 10 ** (-max(0.0, limit_db) / 20)
+
+
+class HighPass:
+    """Streaming 2nd-order Butterworth high-pass (RBJ biquad, transposed direct form II)."""
+
+    def __init__(self, sample_rate: int, cutoff_hz: float = 80.0):
+        self.sample_rate = sample_rate
+        self.cutoff_hz = None
+        self.set_cutoff(cutoff_hz)
+        self.reset()
+
+    def set_cutoff(self, cutoff_hz: float) -> None:
+        if cutoff_hz == self.cutoff_hz:
+            return
+        self.cutoff_hz = cutoff_hz
+        w0 = 2 * math.pi * cutoff_hz / self.sample_rate
+        alpha = math.sin(w0) / math.sqrt(2)  # Q = 1/sqrt(2): maximally flat passband
+        cos_w0 = math.cos(w0)
+        a0 = 1 + alpha
+        self._b = ((1 + cos_w0) / 2 / a0, -(1 + cos_w0) / a0, (1 + cos_w0) / 2 / a0)
+        self._a = (-2 * cos_w0 / a0, (1 - alpha) / a0)
+
+    def reset(self) -> None:
+        self._z1 = self._z2 = 0.0
+
+    def process(self, audio: np.ndarray) -> np.ndarray:
+        b0, b1, b2 = self._b
+        a1, a2 = self._a
+        z1, z2 = self._z1, self._z2
+        out = []
+        append = out.append
+        for x in audio.tolist():
+            y = b0 * x + z1
+            z1 = b1 * x - a1 * y + z2
+            z2 = b2 * x - a2 * y
+            append(y)
+        self._z1, self._z2 = z1, z2
+        return np.asarray(out, dtype=np.float32)
+
+
 class DeepFilterNet:
     """Streaming DeepFilterNet3 (48 kHz full-band). Processes fixed 512-sample hops.
 
-    Adds fft_size - hop_size = 512 samples (~10.7 ms) of algorithmic latency.
+    Output lags input by LATENCY samples (32 ms): the STFT window plus the model's
+    lookahead, measured by cross-correlating input and output.
     """
 
     SAMPLE_RATE = 48000
     HOP_SIZE = 512
+    LATENCY = 3 * HOP_SIZE
     NB_ERB = 32
     NB_DF = 96
 
@@ -152,12 +215,10 @@ class AudioPipeline:
         self._lock = threading.Lock()
         self._dfn: DeepFilterNet | None = None
         self._vad: SileroVAD | None = None
-        self._gate = SpeechGate(self.SAMPLE_RATE)
-        self._vad_buf = np.zeros(0, dtype=np.float32)
-        self._resample_buf = np.zeros(0, dtype=np.float32)
+        self._hpf = HighPass(self.SAMPLE_RATE, config.low_cut_hz)
         self._errors_logged = 0
-        self.level = 0.0
         self.error: str | None = None
+        self._reset_state()
 
     @property
     def speech_active(self) -> bool:
@@ -175,15 +236,55 @@ class AudioPipeline:
         except Exception as e:
             log.error("Silero VAD unavailable: %s", e)
 
+    def _reset_state(self) -> None:
+        if self._dfn:
+            self._dfn.reset()
+        if self._vad:
+            self._vad.reset()
+        self._hpf.reset()
+        self._dry = np.zeros(DeepFilterNet.LATENCY, dtype=np.float32)
+        self._vad_buf = np.zeros(0, dtype=np.float32)
+        self._resample_buf = np.zeros(0, dtype=np.float32)
+        self._gate = SpeechGate(self.SAMPLE_RATE, holdover_s=self.config.vad_holdover)
+        self.level = 0.0
+
+    def reset(self) -> None:
+        """Forget all stream history (filter, model, and gate state)."""
+        with self._lock:
+            self._reset_state()
+
+    @property
+    def latency(self) -> int:
+        """Samples of delay the current settings add."""
+        return DeepFilterNet.LATENCY if self._denoising else 0
+
+    @property
+    def _denoising(self) -> bool:
+        return self.config.noise_suppression and self._dfn is not None
+
     def process_block(self, audio: np.ndarray) -> np.ndarray:
         """Process one mono float32 block (BLOCK_SIZE samples). Pure function of state."""
         cfg = self.config
         with self._lock:
-            if cfg.noise_suppression and self._dfn is not None:
+            if cfg.low_cut:
+                self._hpf.set_cutoff(cfg.low_cut_hz)
+                audio = self._hpf.process(audio)
+            else:
+                self._hpf.reset()
+
+            if self._denoising:
                 processed = self._dfn.process(audio)
+                mix = attenuation_mix(cfg.noise_reduction_db)
+                # Keep a copy of the input delayed to line up with the model output, so
+                # the strength blend doesn't comb-filter.
+                delayed = np.concatenate([self._dry, audio])
+                dry, self._dry = delayed[:len(audio)], delayed[len(audio):]
+                if mix:
+                    processed = (processed * (1 - mix) + dry * mix).astype(np.float32)
             else:
                 processed = audio
 
+            self._gate.holdover_samples = int(cfg.vad_holdover * self.SAMPLE_RATE)
             if cfg.vad_enabled and self._vad is not None:
                 # 48k -> 16k: average groups of 3 (cheap low-pass + decimate).
                 resample_input = np.concatenate([self._resample_buf, processed])
@@ -202,6 +303,21 @@ class AudioPipeline:
                 self._gate.update(True, len(processed))
 
             return self._gate.apply(processed)
+
+    def render(self, audio: np.ndarray) -> np.ndarray:
+        """Process a whole clip from a clean state, for offline previews.
+
+        The result is trimmed to line up sample-for-sample with ``audio``, so playback
+        can switch between the two without jumping.
+        """
+        audio = np.asarray(audio, dtype=np.float32)
+        self.reset()
+        shift = self.latency
+        padded = np.pad(audio, (0, shift + (-(len(audio) + shift) % self.BLOCK_SIZE)))
+        out = np.concatenate([self.process_block(block)
+                              for block in padded.reshape(-1, self.BLOCK_SIZE)])
+        self.reset()
+        return out[shift:shift + len(audio)]
 
     def start(self) -> None:
         self.error = None
@@ -239,11 +355,10 @@ class AudioPipeline:
                     log.exception("Audio callback error")
 
         extra = None
-        if platform.system() == "Windows" and "WASAPI" in sd.query_hostapis(
-            sd.query_devices(in_dev.index)["hostapi"]
-        )["name"]:
+        wasapi = wasapi_settings(in_dev.index)
+        if wasapi is not None:
             # Let WASAPI resample when the device isn't running at 48 kHz.
-            extra = (sd.WasapiSettings(auto_convert=True), sd.WasapiSettings(auto_convert=True))
+            extra = (wasapi, sd.WasapiSettings(auto_convert=True))
 
         try:
             self._stream = sd.Stream(
@@ -272,15 +387,7 @@ class AudioPipeline:
             except Exception:
                 log.exception("Error closing audio stream")
             self._stream = None
-        with self._lock:
-            if self._dfn:
-                self._dfn.reset()
-            if self._vad:
-                self._vad.reset()
-            self._vad_buf = np.zeros(0, dtype=np.float32)
-            self._resample_buf = np.zeros(0, dtype=np.float32)
-            self._gate = SpeechGate(self.SAMPLE_RATE)
-            self.level = 0.0
+        self.reset()
 
     def update_config(self, config: PipelineConfig) -> None:
         self.config = config

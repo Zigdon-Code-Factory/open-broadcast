@@ -1,6 +1,23 @@
+import os
+from pathlib import Path
+
 import pytest
+from PySide6.QtGui import QFont, QFontDatabase
+from PySide6.QtWidgets import QApplication
 
 from open_broadcast import models
+
+
+@pytest.fixture(scope="session")
+def application():
+    instance = QApplication.instance() or QApplication([])
+    font_path = Path(os.environ.get("WINDIR", "")) / "Fonts" / "segoeui.ttf"
+    if not QFontDatabase.families() and font_path.is_file():
+        font_id = QFontDatabase.addApplicationFont(str(font_path))
+        families = QFontDatabase.applicationFontFamilies(font_id)
+        if families:
+            instance.setFont(QFont(families[0], 10))
+    return instance
 
 
 def _have_model(name: str) -> bool:

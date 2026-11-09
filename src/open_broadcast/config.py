@@ -12,6 +12,8 @@ from open_broadcast import paths
 log = logging.getLogger(__name__)
 
 BACKGROUND_MODES = ("blur", "remove", "replace", "off")
+# Noise-reduction limits at or above this are treated as "no limit" (full DeepFilterNet).
+NOISE_REDUCTION_MAX_DB = 100.0
 
 
 @dataclass
@@ -29,8 +31,16 @@ class PipelineConfig:
     # Audio
     audio_enabled: bool = True
     noise_suppression: bool = True
+    # Max noise attenuation in dB (DeepFilterNet "attenuation limit"). Lower keeps more of
+    # the room, which sounds more natural; NOISE_REDUCTION_MAX_DB or above means unlimited.
+    noise_reduction_db: float = 100.0
     vad_enabled: bool = True
     vad_threshold: float = 0.5
+    # Seconds the gate stays open after speech stops, so word endings aren't clipped.
+    vad_holdover: float = 0.3
+    # High-pass filter for desk thumps, HVAC rumble, and mic-handling noise.
+    low_cut: bool = False
+    low_cut_hz: float = 80.0
     # Device *names* rather than indices: indices shift when devices are plugged in.
     input_device: str | None = None
     output_device: str | None = None
@@ -60,6 +70,17 @@ def load(path: Path | None = None) -> PipelineConfig:
             setattr(cfg, key, value)
     if cfg.background_mode not in BACKGROUND_MODES:
         cfg.background_mode = "blur"
+    try:
+        cfg.noise_reduction_db = min(max(float(cfg.noise_reduction_db), 0.0),
+                                     NOISE_REDUCTION_MAX_DB)
+        cfg.vad_holdover = min(max(float(cfg.vad_holdover), 0.05), 2.0)
+        cfg.low_cut_hz = min(max(float(cfg.low_cut_hz), 20.0), 300.0)
+    except (TypeError, ValueError):
+        log.warning("Ignoring invalid audio tuning values in %s", path)
+        defaults = PipelineConfig()
+        cfg.noise_reduction_db = defaults.noise_reduction_db
+        cfg.vad_holdover = defaults.vad_holdover
+        cfg.low_cut_hz = defaults.low_cut_hz
     return cfg
 
 

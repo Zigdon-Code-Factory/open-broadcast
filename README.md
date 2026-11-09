@@ -8,13 +8,25 @@ A free, open-source alternative to NVIDIA Broadcast that runs entirely on CPU. N
 
 1. Download and run the Windows `*-setup.exe` from [Releases](https://github.com/Zigdon-Code-Factory/open-broadcast/releases/latest). For an unpublished build, download `release-binaries-windows-x64` from a successful [Release workflow run](https://github.com/Zigdon-Code-Factory/open-broadcast/actions/workflows/release.yml), extract the artifact ZIP, and run the installer inside.
 2. Install [VB-Audio Virtual Cable](https://vb-audio.com/Cable/) separately, restart if its installer requests it, then open **Open Broadcast**. The virtual audio driver is not bundled with the app.
-3. For microphone-only use, uncheck **Camera**. Under **Microphone**, choose your physical/headset microphone as **Input** and **CABLE Input** as **Output**. Use **Refresh devices** if the cable is not listed.
-4. Enable **Noise removal (DeepFilterNet3)**, optionally enable **Mute when not speaking (Silero VAD)**, and click **Start**. Speak and check that the level meter responds.
+3. For microphone-only use, open the **Camera** tab and uncheck **Enable camera**. In the **Microphone** tab, leave **Enable microphone** checked, choose your physical/headset microphone as **Input device** and **CABLE Input** as **Processed output**. Use **Refresh devices** if the cable is not listed.
+4. Enable **Noise removal** (DeepFilterNet3), optionally enable **Mute when not speaking** (Silero VAD), and click **Start processing**. Speak and check that the level meter responds.
 5. In Discord or Zoom, select **CABLE Output** as your microphone and use that app's microphone test. Keep Open Broadcast running; closing its control panel leaves it in the system tray.
 
 **Routing:** your microphone → Open Broadcast → **CABLE Input** → **CABLE Output** → Discord/Zoom. The two cable names refer to opposite ends of the same virtual cable.
 
 For macOS/Linux builds or camera output, see [Install](#install) and [Virtual devices](#virtual-devices). To run from source, see [Develop](#develop).
+
+### Control panel
+
+- **Microphone**: device routing, noise removal, voice gating and a live input-level meter.
+  - **Strength** limits how far noise is pushed down (6 dB to Max). Lower settings keep a little room tone and sound more natural.
+  - **Threshold** and **Hold** tune the voice gate: how loud speech must be, and how long the mic stays open after you stop talking.
+  - **Reduce low rumble** adds an 80 Hz high-pass filter for desk thumps and HVAC hum.
+  - **Test your voice** records up to 10 seconds, then plays it on your default speakers with a seek bar. Switch between **Original** and **Processed** during playback; changing an effect re-renders the clip. This works whether or not processing is running.
+- **Speaker**: clearly marked unavailable; incoming-audio processing is not implemented yet.
+- **Camera**: camera selection, background effects, auto framing and a resizable preview.
+
+Tabs only change which controls are shown. The shared **Start processing** / **Stop processing** button controls all enabled devices; the footer lists which devices are enabled. **Settings** contains automatic update preferences and **Check now**. Installed Windows builds also keep **Update and restart** in the footer.
 
 ## Features
 
@@ -54,7 +66,7 @@ In Zoom, Discord and similar apps, pick **CABLE Output** (Windows) as the microp
 
 ## Updates
 
-- The app checks GitHub Releases for a newer version at startup and every 6 hours after that. You can also check manually from the tray menu (**Check for Updates…**) or from **Check now** in the control panel. Turn off **Check for updates automatically** in the control panel to disable automatic checks.
+- The app checks GitHub Releases for a newer version at startup and every 6 hours after that. You can also check manually from the tray menu (**Check for Updates…**) or from **Settings → Check now** in the control panel. Turn off **Check for updates automatically** under **Settings** to disable automatic checks.
 - **Windows installer build**: click **Update and restart** in the control panel or tray menu. One click checks GitHub for a newer release, downloads its installer, verifies its SHA-256 against `SHA256SUMS.txt`, closes the app, upgrades the existing installation and relaunches. Your settings are kept. If there is no newer release, the app reports that you are up to date. The button is disabled while checking or downloading; downloads can be cancelled before installation.
 - Automatic background checks still ask before installing. The existing **Check now** / **Install and restart** confirmation flow also remains available.
 - **Portable, macOS and Linux builds**: the prompt opens the release page instead.
