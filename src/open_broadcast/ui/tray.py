@@ -241,6 +241,7 @@ class ControlPanel(QWidget):
     def _build_microphone_page(self) -> QScrollArea:
         page, body = self._page("Microphone", "Make your voice the focus, not your room.")
         controls = self._controls(body)
+        controls.setSpacing(12)
         self.audio_group = QGroupBox("Enable microphone")
         self.audio_group.setCheckable(True)
         self.audio_group.toggled.connect(lambda enabled: self._set(audio_enabled=enabled))
@@ -321,6 +322,8 @@ class ControlPanel(QWidget):
         controls.addStretch()
 
         monitor, monitor_layout = self._card("MICROPHONE MONITOR")
+        # Leave room for native font/control metrics on macOS and Linux as well.
+        monitor_layout.setSpacing(8)
         state_row = QHBoxLayout()
         self.microphone_state = label("Ready when you are", "sectionTitle")
         state_row.addWidget(self.microphone_state)

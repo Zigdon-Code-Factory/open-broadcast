@@ -1,3 +1,3 @@
 """Open Broadcast — free NVIDIA Broadcast alternative on CPU."""
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
